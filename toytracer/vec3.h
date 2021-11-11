@@ -49,6 +49,11 @@ class vec3
 		double e[3];
 };
 
+// Type aliases
+
+using point3 = vec3;
+using color = vec3;
+
 // Utility functions
 
 inline std::ostream& operator<<(std::ostream& out, const vec3& v) {
@@ -93,10 +98,4 @@ inline vec3 cross(const vec3& u, const vec3& v) {
 
 inline vec3 unit_vector(vec3 v) {
 	return v / v.length();
-}
-
-void write_color(std::ostream& out, vec3 pixel_color) {
-	out << static_cast<int>(255.999 * pixel_color.x()) << ' '
-	    << static_cast<int>(255.999 * pixel_color.y()) << ' '
-		<< static_cast<int>(255.999 * pixel_color.z()) << '\n';
 }
