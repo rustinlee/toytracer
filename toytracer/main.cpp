@@ -1,10 +1,12 @@
+#define SDL_MAIN_HANDLED
+#include "SDL.h"
+
 #include "vec3.h"
 #include "ray.h"
 #include "color.h"
 #include "color32.h"
 
 #include <iostream>
-#include <SDL.h>
 #include <vector>
 #include <thread>
 
@@ -45,7 +47,6 @@ color32 ray_color(const ray& r) {
 	if (t > 0.0) {
 		// Hit sphere, return surface normal
 		vec3 n = unit_vector(r.at(t) - vec3(0, 0, -1));
-		//return 0.5 * color(n.x() + 1, n.y() + 1, n.z() + 1);
 		return color32(static_cast<uint8_t>(255.999 * (n.x() + 1) * 0.5),
 		               static_cast<uint8_t>(255.999 * (n.y() + 1) * 0.5),
 		               static_cast<uint8_t>(255.999 * (n.z() + 1) * 0.5),
@@ -55,7 +56,6 @@ color32 ray_color(const ray& r) {
 	// Miss, return sky gradient
 	vec3 unit_direction = unit_vector(r.direction());
 	t = 0.5 * (unit_direction.y() + 1.0);
-	//return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
 	return (1.0 - t) * color32(255, 255, 255, 255) + t * color32(128, 200, 255, 255);
 }
 
@@ -80,7 +80,6 @@ void render_pixels(std::vector<uint8_t> &pixels, int start_index, int pixels_to_
 
 int main(int argc, char** args) {
 	const int batch_size = image_width * 10; // Pixels to render per thread
-	//auto image_buffer = new color32[image_width][image_height];
 	std::vector<std::thread> threads;
 	std::vector<uint8_t> pixels(image_width * image_height * 4, 0);
 
@@ -93,6 +92,7 @@ int main(int argc, char** args) {
 	SDL_Renderer* renderer = NULL;
 	SDL_Texture* texture = NULL;
 
+	SDL_SetMainReady();
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) < 0) {
 		std::cout << "Error initializing SDL: " << SDL_GetError() << std::endl;
 		system("pause");
@@ -113,7 +113,7 @@ int main(int argc, char** args) {
 		return 1;
 	}
 
-	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	if (!renderer) {
 		std::cout << "Error creating renderer: " << SDL_GetError() << std::endl;
 		system("pause");
@@ -152,55 +152,16 @@ int main(int argc, char** args) {
 
 		threads.clear();
 
-		/*
-		for (unsigned int i = 0; i < 1000; i++)
-		{
-			const unsigned int x = rand() % image_width;
-			const unsigned int y = rand() % image_height;
-
-			const unsigned int offset = (image_width * 4 * y) + x * 4;
-			pixels[offset + 0] = rand() % 256;        // b
-			pixels[offset + 1] = rand() % 256;        // g
-			pixels[offset + 2] = rand() % 256;        // r
-			pixels[offset + 3] = SDL_ALPHA_OPAQUE;    // a
-		}
-		*/
-
+		// Push pixels to window surface
 		SDL_UpdateTexture(texture, NULL, pixels.data(), image_width * 4);
 		SDL_RenderCopy(renderer, texture, NULL, NULL);
 		SDL_RenderPresent(renderer);
-
-		// Put rendered pixels to surface
-		//std::cerr << win_surface->format->BytesPerPixel << std::endl;
-
-		SDL_Delay(10);
 	}
-
-	/*
-	// Write out rendered pixels to PPM image file
-	std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
-
-	// Iterate over output pixels, left to right, top to bottom
-	for (int j = image_height - 1; j >= 0; --j) {
-		std::cerr << "\rScanlines to be written: " << j << ' ' << std::flush;
-		for (int i = 0; i < image_width; ++i) {
-			write_color(std::cout, image_buffer[i][j]);
-		}
-	}
-	*/
 
 	// Clean up SDL
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
-
-	// Release image buffer memory
-	/*
-	for (int i = 0; i < image_width; ++i) {
-		delete[] image_buffer[i];
-	}
-	delete[] image_buffer;
-	*/
 
 	return 0;
 }
