@@ -19,7 +19,8 @@ const auto aspect_ratio = 16.0 / 9.0;
 const int image_width = 640;
 const int image_height = 360; // static_cast<int>(image_width / aspect_ratio);
 const int pixel_count = image_width * image_height;
-const int samples_per_pixel = 16;
+const int samples_per_pixel = 8;
+const int max_bounces = 8;
 
 // Scene
 hittable_list scene;
@@ -27,14 +28,25 @@ hittable_list scene;
 // Camera
 camera cam;
 
-color ray_color(const ray& r) {
+// Debug visualizations
+bool render_normals;
+
+color ray_color(const ray& r, int depth) {
+	if (depth >= max_bounces)
+		return color(0, 0, 0);
+
 	// Test for scene intersections
 	hit_result result;
-	if (scene.hit(r, 0, infinity, result)) {
-		// Hit, return surface normal
-		return 0.5 * color(result.normal.x() + 1,
-		                   result.normal.y() + 1,
-		                   result.normal.z() + 1);
+	if (scene.hit(r, 0.001, infinity, result)) {
+		if (render_normals) {
+			// Hit, return surface normal
+			return 0.5 * color(result.normal.x() + 1,
+			                   result.normal.y() + 1,
+			                   result.normal.z() + 1);
+		} else {
+			point3 bounce_direction = result.p + result.normal + random_unit_vector();
+			return 0.5 * ray_color(ray(result.p, bounce_direction - result.p), depth + 1);
+		}
 	}
 
 	// Miss, return sky gradient
@@ -55,13 +67,15 @@ void render_pixels(std::vector<uint8_t> &pixels, int start_index, int pixels_to_
 			auto u = (double(x) + random_double()) / (image_width - 1);
 			auto v = (double((image_height - 1) - y) + random_double()) / (image_height - 1);
 			ray r = cam.get_ray(u, v);
-			color_sum += ray_color(r);
+			color_sum += ray_color(r, 0);
 		}
-
+		
+		// Divide sum by number of samples, perform gamma correction, and write final pixel value
+		auto scale = 1.0 / samples_per_pixel;
 		const unsigned int offset = (image_width * 4 * y) + x * 4;
-		pixels[offset + 0] = static_cast<uint8_t>(255.999 * (color_sum.x() / double(samples_per_pixel)));
-		pixels[offset + 1] = static_cast<uint8_t>(255.999 * (color_sum.y() / double(samples_per_pixel)));
-		pixels[offset + 2] = static_cast<uint8_t>(255.999 * (color_sum.z() / double(samples_per_pixel)));
+		pixels[offset + 0] = static_cast<uint8_t>(255.999 * sqrt(color_sum.x() * scale));
+		pixels[offset + 1] = static_cast<uint8_t>(255.999 * sqrt(color_sum.y() * scale));
+		pixels[offset + 2] = static_cast<uint8_t>(255.999 * sqrt(color_sum.z() * scale));
 		pixels[offset + 3] = SDL_ALPHA_OPAQUE;
 	}
 }
@@ -128,6 +142,11 @@ int main(int argc, char** args) {
 			switch (ev.type) {
 				case SDL_QUIT:
 					running = false;
+					break;
+				case SDL_KEYDOWN:
+					// N key - Toggle rendering normals
+					if (ev.key.keysym.sym == SDLK_n)
+						render_normals = !render_normals;
 					break;
 			}
 		}
