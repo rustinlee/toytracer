@@ -7,8 +7,10 @@
 #include "color32.h"
 #include "hittable_list.h"
 #include "sphere.h"
+#include "camera.h"
 
 #include <iostream>
+#include <string>
 #include <vector>
 #include <thread>
 
@@ -17,34 +19,28 @@ const auto aspect_ratio = 16.0 / 9.0;
 const int image_width = 640;
 const int image_height = 360; // static_cast<int>(image_width / aspect_ratio);
 const int pixel_count = image_width * image_height;
+const int samples_per_pixel = 16;
 
 // Scene
 hittable_list scene;
 
 // Camera
-const auto viewport_height = 2.0;
-const auto viewport_width = aspect_ratio * viewport_height;
-const auto focal_length = 1.0;
+camera cam;
 
-auto origin = point3(0, 0, 0);
-const auto horizontal = vec3(viewport_width, 0, 0);
-const auto vertical = vec3(0, viewport_height, 0);
-
-color32 ray_color(const ray& r) {
+color ray_color(const ray& r) {
 	// Test for scene intersections
 	hit_result result;
 	if (scene.hit(r, 0, infinity, result)) {
 		// Hit, return surface normal
-		return color32(static_cast<uint8_t>(255.999 * (result.normal.x() + 1) * 0.5),
-		               static_cast<uint8_t>(255.999 * (result.normal.y() + 1) * 0.5),
-		               static_cast<uint8_t>(255.999 * (result.normal.z() + 1) * 0.5),
-		               SDL_ALPHA_OPAQUE);
+		return 0.5 * color(result.normal.x() + 1,
+		                   result.normal.y() + 1,
+		                   result.normal.z() + 1);
 	}
 
 	// Miss, return sky gradient
 	vec3 unit_direction = unit_vector(r.direction());
 	auto t = 0.5 * (unit_direction.y() + 1.0);
-	return (1.0 - t) * color32(255, 255, 255, 255) + t * color32(128, 200, 255, 255);
+	return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
 }
 
 void render_pixels(std::vector<uint8_t> &pixels, int start_index, int pixels_to_render) {
@@ -53,16 +49,20 @@ void render_pixels(std::vector<uint8_t> &pixels, int start_index, int pixels_to_
 	{
 		int x = i % image_width;
 		int y = floor(i / image_width);
-		auto u = double(x) / (image_width - 1);
-		auto v = double((image_height - 1) - y) / (image_height - 1);
-		const auto lower_left_corner = origin - horizontal / 2 - vertical / 2 - vec3(0, 0, focal_length);
-		ray r(origin, lower_left_corner + u * horizontal + v * vertical - origin);
-		color32 c = ray_color(r);
+
+		color color_sum(0, 0, 0);
+		for (int s = 0; s < samples_per_pixel; ++s) {
+			auto u = (double(x) + random_double()) / (image_width - 1);
+			auto v = (double((image_height - 1) - y) + random_double()) / (image_height - 1);
+			ray r = cam.get_ray(u, v);
+			color_sum += ray_color(r);
+		}
+
 		const unsigned int offset = (image_width * 4 * y) + x * 4;
-		pixels[offset + 0] = c.r();
-		pixels[offset + 1] = c.g();
-		pixels[offset + 2] = c.b();
-		pixels[offset + 3] = c.a();
+		pixels[offset + 0] = static_cast<uint8_t>(255.999 * (color_sum.x() / double(samples_per_pixel)));
+		pixels[offset + 1] = static_cast<uint8_t>(255.999 * (color_sum.y() / double(samples_per_pixel)));
+		pixels[offset + 2] = static_cast<uint8_t>(255.999 * (color_sum.z() / double(samples_per_pixel)));
+		pixels[offset + 3] = SDL_ALPHA_OPAQUE;
 	}
 }
 
@@ -121,6 +121,8 @@ int main(int argc, char** args) {
 
 	// Main rendering loop
 	while (running) {
+		uint64_t start = SDL_GetPerformanceCounter();
+
 		// Handle input events
 		while (SDL_PollEvent(&ev) != 0) {
 			switch (ev.type) {
@@ -129,8 +131,6 @@ int main(int argc, char** args) {
 					break;
 			}
 		}
-
-		origin += point3(0.01, 0, 0);
 
 		// Render pixel colors into array
 		for (int i = 0; i < pixel_count / batch_size; i++) {
@@ -148,6 +148,12 @@ int main(int argc, char** args) {
 		SDL_UpdateTexture(texture, NULL, pixels.data(), image_width * 4);
 		SDL_RenderCopy(renderer, texture, NULL, NULL);
 		SDL_RenderPresent(renderer);
+
+		uint64_t end = SDL_GetPerformanceCounter();
+		float elapsed = (end - start) / (float)SDL_GetPerformanceFrequency();
+		char title[16];
+		sprintf_s(title, "%f", 1.0f / elapsed);
+		SDL_SetWindowTitle(window, title);
 	}
 
 	// Clean up SDL
