@@ -19,7 +19,7 @@ const auto aspect_ratio = 16.0 / 9.0;
 const int image_width = 640;
 const int image_height = 360; // static_cast<int>(image_width / aspect_ratio);
 const int pixel_count = image_width * image_height;
-int samples_per_pixel = 4;
+int samples_per_pixel = 1;
 const int max_bounces = 8;
 
 // Scene
@@ -55,28 +55,36 @@ color ray_color(const ray& r, int depth) {
 	return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
 }
 
-void render_pixels(std::vector<uint8_t> &pixels, int start_index, int pixels_to_render) {
-
+void render_pixels(std::vector<color> &color_sums, std::vector<uint8_t> &pixels, int start_index, int pixels_to_render) {
 	for (int i = start_index; i < start_index + pixels_to_render; i++)
 	{
 		int x = i % image_width;
 		int y = floor(i / image_width);
 
-		color color_sum(0, 0, 0);
-		for (int s = 0; s < samples_per_pixel; ++s) {
-			auto u = (double(x) + random_double()) / (image_width - 1);
-			auto v = (double((image_height - 1) - y) + random_double()) / (image_height - 1);
-			ray r = cam.get_ray(u, v);
-			color_sum += ray_color(r, 0);
-		}
+		auto u = (double(x) + random_double()) / (image_width - 1);
+		auto v = (double((image_height - 1) - y) + random_double()) / (image_height - 1);
+		ray r = cam.get_ray(u, v);
+		color_sums[i] += ray_color(r, 0);
 		
 		// Divide sum by number of samples, perform gamma correction, and write final pixel value
 		auto scale = 1.0 / samples_per_pixel;
 		const unsigned int offset = (image_width * 4 * y) + x * 4;
-		pixels[offset + 0] = static_cast<uint8_t>(255.999 * sqrt(color_sum.x() * scale));
-		pixels[offset + 1] = static_cast<uint8_t>(255.999 * sqrt(color_sum.y() * scale));
-		pixels[offset + 2] = static_cast<uint8_t>(255.999 * sqrt(color_sum.z() * scale));
+		pixels[offset + 0] = static_cast<uint8_t>(255.999 * sqrt(color_sums[i].x() * scale));
+		pixels[offset + 1] = static_cast<uint8_t>(255.999 * sqrt(color_sums[i].y() * scale));
+		pixels[offset + 2] = static_cast<uint8_t>(255.999 * sqrt(color_sums[i].z() * scale));
 		pixels[offset + 3] = SDL_ALPHA_OPAQUE;
+	}
+}
+
+void clear_color_sums(std::vector<color> &color_sums) {
+	samples_per_pixel = 1;
+	color_sums.clear();
+	for (int y = 0; y < image_height; y++)
+	{
+		for (int x = 0; x < image_width; x++)
+		{
+			color_sums.push_back(color(0, 0, 0));
+		}
 	}
 }
 
@@ -84,6 +92,8 @@ int main(int argc, char** args) {
 	const int batch_size = image_width * 10; // Pixels to render per thread
 	std::vector<std::thread> threads;
 	std::vector<uint8_t> pixels(image_width * image_height * 4, 0);
+	std::vector<color> color_sums;
+	clear_color_sums(color_sums);
 
 	SDL_Event ev;
 	bool running = true;
@@ -137,43 +147,10 @@ int main(int argc, char** args) {
 	while (running) {
 		uint64_t start = SDL_GetPerformanceCounter();
 
-		// Handle input events
-		while (SDL_PollEvent(&ev) != 0) {
-			switch (ev.type) {
-				case SDL_QUIT:
-					running = false;
-					break;
-				case SDL_KEYDOWN:
-					// N key - Toggle rendering normals
-					if (ev.key.keysym.sym == SDLK_n)
-						render_normals = !render_normals;
-					// Number keys - Set samples per pixel
-					if (ev.key.keysym.sym == SDLK_1)
-						samples_per_pixel = 1 << 0;
-					if (ev.key.keysym.sym == SDLK_2)
-						samples_per_pixel = 1 << 1;
-					if (ev.key.keysym.sym == SDLK_3)
-						samples_per_pixel = 1 << 2;
-					if (ev.key.keysym.sym == SDLK_4)
-						samples_per_pixel = 1 << 3;
-					if (ev.key.keysym.sym == SDLK_5)
-						samples_per_pixel = 1 << 4;
-					if (ev.key.keysym.sym == SDLK_6)
-						samples_per_pixel = 1 << 5;
-					if (ev.key.keysym.sym == SDLK_7)
-						samples_per_pixel = 1 << 6;
-					if (ev.key.keysym.sym == SDLK_8)
-						samples_per_pixel = 1 << 7;
-					if (ev.key.keysym.sym == SDLK_9)
-						samples_per_pixel = 1 << 8;
-					break;
-			}
-		}
-
 		// Render pixel colors into array
 		for (int i = 0; i < pixel_count / batch_size; i++) {
 			// Create thread for batch of pixels to render
-			threads.push_back(std::thread(render_pixels, std::ref(pixels), i * batch_size, batch_size));
+			threads.push_back(std::thread(render_pixels, std::ref(color_sums), std::ref(pixels), i * batch_size, batch_size));
 		}
 
 		for (auto& th : threads) {
@@ -181,6 +158,7 @@ int main(int argc, char** args) {
 		}
 
 		threads.clear();
+		samples_per_pixel++;
 
 		// Push pixels to window surface
 		SDL_UpdateTexture(texture, NULL, pixels.data(), image_width * 4);
@@ -188,12 +166,43 @@ int main(int argc, char** args) {
 		SDL_RenderPresent(renderer);
 
 		uint64_t end = SDL_GetPerformanceCounter();
-		float elapsed = (end - start) / (float)SDL_GetPerformanceFrequency();
+		float delta = (end - start) / (float)SDL_GetPerformanceFrequency();
 
-		cam.set_origin(point3(sin(SDL_GetTicks() / 1000.0), 0, 0));
+		// Handle input events
+		while (SDL_PollEvent(&ev) != 0) {
+			switch (ev.type) {
+			case SDL_QUIT:
+				running = false;
+				break;
+			case SDL_KEYDOWN:
+				// N key - Toggle rendering normals
+				if (ev.key.keysym.sym == SDLK_n) {
+					render_normals = !render_normals;
+					clear_color_sums(color_sums);
+				}
+				// WASD keys - Move camera origin
+				if (ev.key.keysym.sym == SDLK_w) {
+					cam.set_origin(cam.get_origin() + point3(0, 0, -1) * delta);
+					clear_color_sums(color_sums);
+				}
+				if (ev.key.keysym.sym == SDLK_a) {
+					cam.set_origin(cam.get_origin() + point3(-1, 0, 0) * delta);
+					clear_color_sums(color_sums);
+				}
+				if (ev.key.keysym.sym == SDLK_s) {
+					cam.set_origin(cam.get_origin() + point3(0, 0, 1) * delta);
+					clear_color_sums(color_sums);
+				}
+				if (ev.key.keysym.sym == SDLK_d) {
+					cam.set_origin(cam.get_origin() + point3(1, 0, 0) * delta);
+					clear_color_sums(color_sums);
+				}
+				break;
+			}
+		}
 
 		char title[16];
-		sprintf_s(title, "%f", 1.0f / elapsed);
+		sprintf_s(title, "%f", 1.0f / delta);
 		SDL_SetWindowTitle(window, title);
 	}
 

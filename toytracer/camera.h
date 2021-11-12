@@ -15,6 +15,10 @@ class camera {
 			return ray(origin, lower_left_corner + u * horizontal + v * vertical - origin);
 		}
 
+		point3 get_origin() {
+			return origin;
+		}
+
 		void set_origin(point3 new_origin) {
 			origin = new_origin;
 			horizontal = vec3(viewport_width, 0.0, 0.0);
