@@ -18,9 +18,9 @@ inline double degrees_to_radians(double degrees) {
 
 inline double random_double() {
 	// Returns a random real in [0,1)
-	static std::uniform_real_distribution<double> distribution(0.0, 1.0);
-	static std::mt19937_64 generator;
-	return distribution(generator);
+	uint32_t a;
+	_rdrand32_step(&a);
+	return a / double(_UI32_MAX);
 }
 
 inline double random_double(double min, double max) {
