@@ -1,10 +1,12 @@
 #define SDL_MAIN_HANDLED
 #include "SDL.h"
 
-#include "vec3.h"
-#include "ray.h"
+#include "toytracer.h"
+
 #include "color.h"
 #include "color32.h"
+#include "hittable_list.h"
+#include "sphere.h"
 
 #include <iostream>
 #include <vector>
@@ -16,6 +18,9 @@ const int image_width = 640;
 const int image_height = 360; // static_cast<int>(image_width / aspect_ratio);
 const int pixel_count = image_width * image_height;
 
+// Scene
+hittable_list scene;
+
 // Camera
 const auto viewport_height = 2.0;
 const auto viewport_width = aspect_ratio * viewport_height;
@@ -24,38 +29,21 @@ const auto focal_length = 1.0;
 auto origin = point3(0, 0, 0);
 const auto horizontal = vec3(viewport_width, 0, 0);
 const auto vertical = vec3(0, viewport_height, 0);
-const auto lower_left_corner = origin - horizontal / 2 - vertical / 2 - vec3(0, 0, focal_length);
-
-double hit_sphere(const point3& center, double radius, const ray& r) {
-	vec3 oc = r.origin() - center;
-	auto a = dot(r.direction(), r.direction());
-	auto b = 2.0 * dot(oc, r.direction());
-	auto c = dot(oc, oc) - radius * radius;
-	auto discriminant = b * b - 4 * a * c;
-	if (discriminant < 0) {
-		// No real solutions, missed sphere
-		return -1.0;
-	} else {
-		// 1 or 2 real solutions, return smallest t for ray r that gives a point on the sphere
-		return (-b - sqrt(discriminant)) / (2.0 * a);
-	}
-}
 
 color32 ray_color(const ray& r) {
-	// Test for sphere intersection
-	auto t = hit_sphere(point3(0, 0, -1), 0.5, r);
-	if (t > 0.0) {
-		// Hit sphere, return surface normal
-		vec3 n = unit_vector(r.at(t) - vec3(0, 0, -1));
-		return color32(static_cast<uint8_t>(255.999 * (n.x() + 1) * 0.5),
-		               static_cast<uint8_t>(255.999 * (n.y() + 1) * 0.5),
-		               static_cast<uint8_t>(255.999 * (n.z() + 1) * 0.5),
+	// Test for scene intersections
+	hit_result result;
+	if (scene.hit(r, 0, infinity, result)) {
+		// Hit, return surface normal
+		return color32(static_cast<uint8_t>(255.999 * (result.normal.x() + 1) * 0.5),
+		               static_cast<uint8_t>(255.999 * (result.normal.y() + 1) * 0.5),
+		               static_cast<uint8_t>(255.999 * (result.normal.z() + 1) * 0.5),
 		               SDL_ALPHA_OPAQUE);
 	}
 
 	// Miss, return sky gradient
 	vec3 unit_direction = unit_vector(r.direction());
-	t = 0.5 * (unit_direction.y() + 1.0);
+	auto t = 0.5 * (unit_direction.y() + 1.0);
 	return (1.0 - t) * color32(255, 255, 255, 255) + t * color32(128, 200, 255, 255);
 }
 
@@ -67,8 +55,8 @@ void render_pixels(std::vector<uint8_t> &pixels, int start_index, int pixels_to_
 		int y = floor(i / image_width);
 		auto u = double(x) / (image_width - 1);
 		auto v = double((image_height - 1) - y) / (image_height - 1);
+		const auto lower_left_corner = origin - horizontal / 2 - vertical / 2 - vec3(0, 0, focal_length);
 		ray r(origin, lower_left_corner + u * horizontal + v * vertical - origin);
-		//image_buffer[x][y] = ray_color(r);
 		color32 c = ray_color(r);
 		const unsigned int offset = (image_width * 4 * y) + x * 4;
 		pixels[offset + 0] = c.r();
@@ -126,6 +114,10 @@ int main(int argc, char** args) {
 		system("pause");
 		return 1;
 	}
+
+	// Scene definition
+	scene.add(make_shared<sphere>(point3(0, 0, -1), 0.5));
+	scene.add(make_shared<sphere>(point3(0, -100.5, -1), 100));
 
 	// Main rendering loop
 	while (running) {
