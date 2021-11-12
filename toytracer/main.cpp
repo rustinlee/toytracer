@@ -189,6 +189,9 @@ int main(int argc, char** args) {
 
 		uint64_t end = SDL_GetPerformanceCounter();
 		float elapsed = (end - start) / (float)SDL_GetPerformanceFrequency();
+
+		cam.set_origin(point3(sin(SDL_GetTicks() / 1000.0), 0, 0));
+
 		char title[16];
 		sprintf_s(title, "%f", 1.0f / elapsed);
 		SDL_SetWindowTitle(window, title);
