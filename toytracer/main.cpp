@@ -19,7 +19,7 @@ const auto aspect_ratio = 16.0 / 9.0;
 const int image_width = 640;
 const int image_height = 360; // static_cast<int>(image_width / aspect_ratio);
 const int pixel_count = image_width * image_height;
-const int samples_per_pixel = 8;
+int samples_per_pixel = 4;
 const int max_bounces = 8;
 
 // Scene
@@ -147,6 +147,25 @@ int main(int argc, char** args) {
 					// N key - Toggle rendering normals
 					if (ev.key.keysym.sym == SDLK_n)
 						render_normals = !render_normals;
+					// Number keys - Set samples per pixel
+					if (ev.key.keysym.sym == SDLK_1)
+						samples_per_pixel = 1 << 0;
+					if (ev.key.keysym.sym == SDLK_2)
+						samples_per_pixel = 1 << 1;
+					if (ev.key.keysym.sym == SDLK_3)
+						samples_per_pixel = 1 << 2;
+					if (ev.key.keysym.sym == SDLK_4)
+						samples_per_pixel = 1 << 3;
+					if (ev.key.keysym.sym == SDLK_5)
+						samples_per_pixel = 1 << 4;
+					if (ev.key.keysym.sym == SDLK_6)
+						samples_per_pixel = 1 << 5;
+					if (ev.key.keysym.sym == SDLK_7)
+						samples_per_pixel = 1 << 6;
+					if (ev.key.keysym.sym == SDLK_8)
+						samples_per_pixel = 1 << 7;
+					if (ev.key.keysym.sym == SDLK_9)
+						samples_per_pixel = 1 << 8;
 					break;
 			}
 		}
