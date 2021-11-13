@@ -1,10 +1,14 @@
 #pragma once
 
 #include "ray.h"
+#include "toytracer.h"
+
+class material;
 
 struct hit_result {
 	point3 p;
 	vec3 normal;
+	shared_ptr<material> mat_ptr;
 	double t;
 	bool front_face;
 

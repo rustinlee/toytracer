@@ -8,6 +8,7 @@
 #include "hittable_list.h"
 #include "sphere.h"
 #include "camera.h"
+#include "material.h"
 
 #include <iostream>
 #include <string>
@@ -44,8 +45,11 @@ color ray_color(const ray& r, int depth) {
 			                   result.normal.y() + 1,
 			                   result.normal.z() + 1);
 		} else {
-			point3 bounce_direction = result.p + result.normal + random_unit_vector();
-			return 0.5 * ray_color(ray(result.p, bounce_direction - result.p), depth + 1);
+			ray scattered;
+			color attenuation;
+			if (result.mat_ptr->scatter(r, result, attenuation, scattered))
+				return attenuation * ray_color(scattered, depth + 1);
+			return color(0, 0, 0);
 		}
 	}
 
@@ -140,8 +144,15 @@ int main(int argc, char** args) {
 	}
 
 	// Scene definition
-	scene.add(make_shared<sphere>(point3(0, 0, -1), 0.5));
-	scene.add(make_shared<sphere>(point3(0, -100.5, -1), 100));
+	auto material_ground = make_shared<lambertian>(color(0.8, 0.8, 0.0));
+	auto material_center = make_shared<lambertian>(color(0.7, 0.3, 0.3));
+	auto material_left   = make_shared<metal>(color(0.8, 0.8, 0.8), 0.3);
+	auto material_right  = make_shared<metal>(color(0.8, 0.6, 0.2), 1.0);
+
+	scene.add(make_shared<sphere>(point3( 0.0, -100.5, -1.0), 100.0, material_ground));
+	scene.add(make_shared<sphere>(point3( 0.0,    0.0, -1.0),   0.5, material_center));
+	scene.add(make_shared<sphere>(point3(-1.0,    0.0, -1.0),   0.5, material_left));
+	scene.add(make_shared<sphere>(point3( 1.0,    0.0, -1.0),   0.5, material_right));
 
 	// Main rendering loop
 	while (running) {
