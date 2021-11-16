@@ -26,13 +26,11 @@ const auto aspect_ratio = 16.0 / 9.0;
 const int image_width = 640*2;
 const int image_height = 360*2; // static_cast<int>(image_width / aspect_ratio);
 const int pixel_count = image_width * image_height;
-int samples_per_pixel = 1;
 const int max_bounces = 8;
 
 // Performance
 const int batch_size = image_width * 5; // Pixels to render per thread
 const int batch_count = 32;
-int batches_dispatched = 0;
 
 // Scene
 hittable_list scene;
@@ -92,15 +90,15 @@ void render_pixels(color color_sums[], uint32_t pixel_sample_counts[], std::vect
 	}
 }
 
-void clear_color_sums(future<void> render_futures[], color color_sums[], uint32_t pixel_sample_counts[]) {
-	//samples_per_pixel = 1;
-	batches_dispatched = 0;
+void wait_for_render_threads(future<void> render_futures[]) {
 	for (int i = 0; i < batch_count; i++) {
 		if (render_futures[i].valid()) {
 			render_futures[i].get();
 		}
 	}
-	//color_sums.clear();
+}
+
+void clear_color_sums(color color_sums[], uint32_t pixel_sample_counts[]) {
 	for (int y = 0; y < image_height; y++) {
 		for (int x = 0; x < image_width; x++) {
 			auto i = x + y * image_width;
@@ -111,11 +109,15 @@ void clear_color_sums(future<void> render_futures[], color color_sums[], uint32_
 }
 
 int main(int argc, char** args) {
+	bool image_buffer_dirty = false;
+
 	future<void> render_futures[batch_count] = {};
 	vector<uint8_t> pixels(image_width * image_height * 4, 0);
 	color* color_sums = new color[image_width * image_height];
 	uint32_t* pixel_sample_counts = new uint32_t[image_width * image_height];
-	clear_color_sums(render_futures, color_sums, pixel_sample_counts);
+
+	int batches_dispatched = 0;
+	clear_color_sums(color_sums, pixel_sample_counts);
 
 	SDL_Event ev;
 	bool running = true;
@@ -182,9 +184,19 @@ int main(int argc, char** args) {
 	while (running) {
 		uint64_t start = SDL_GetPerformanceCounter();
 
+		// If image buffer is dirty, clear pixel arrays and wait for all old render threads to complete
+		// TODO: we should interrupt threads that are no longer relevant instead of having to wait for them to finish
+		if (image_buffer_dirty) {
+			wait_for_render_threads(render_futures);
+			clear_color_sums(color_sums, pixel_sample_counts);
+			batches_dispatched = 0;
+			image_buffer_dirty = false;
+		}
+
 		// Render pixel colors into array
 		for (int i = 0; i < batch_count; i++) {
 			if (render_futures[i].valid()) {
+				// Check if each render thread has completed; if so, launch another in its place
 				const auto fs = render_futures[i].wait_for(std::chrono::seconds(0));
 				if (fs == std::future_status::ready) {
 					render_futures[i].get();
@@ -215,24 +227,24 @@ int main(int argc, char** args) {
 					// N key - Toggle rendering normals
 					if (ev.key.keysym.sym == SDLK_n) {
 						render_normals = !render_normals;
-						clear_color_sums(render_futures, color_sums, pixel_sample_counts);
+						image_buffer_dirty = true;
 					}
 					// WASD keys - Move camera origin
 					if (ev.key.keysym.sym == SDLK_w) {
 						cam.set_origin(cam.get_origin() + point3(0, 0, -5) * delta);
-						clear_color_sums(render_futures, color_sums, pixel_sample_counts);
+						image_buffer_dirty = true;
 					}
 					if (ev.key.keysym.sym == SDLK_a) {
 						cam.set_origin(cam.get_origin() + point3(-5, 0, 0) * delta);
-						clear_color_sums(render_futures, color_sums, pixel_sample_counts);
+						image_buffer_dirty = true;
 					}
 					if (ev.key.keysym.sym == SDLK_s) {
 						cam.set_origin(cam.get_origin() + point3(0, 0, 5) * delta);
-						clear_color_sums(render_futures, color_sums, pixel_sample_counts);
+						image_buffer_dirty = true;
 					}
 					if (ev.key.keysym.sym == SDLK_d) {
 						cam.set_origin(cam.get_origin() + point3(5, 0, 0) * delta);
-						clear_color_sums(render_futures, color_sums, pixel_sample_counts);
+						image_buffer_dirty = true;
 					}
 					break;
 			}
