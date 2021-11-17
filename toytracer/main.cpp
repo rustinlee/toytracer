@@ -172,7 +172,7 @@ int main(int argc, char** args) {
 	scene.add(make_shared<sphere>(point3( 1.0,    0.0, -1.0),   0.5, material_right));
 
 	// Camera
-	camera cam = camera(vec3(0, 1, -2), vec3(0, -1, 1), 90.0, aspect_ratio);
+	camera cam = camera(vec3(0, 1, -2), -vec3(0, -1, 1), 90.0, aspect_ratio);
 
 	// Initialize render futures array
 	for (int i = 0; i < batch_count; i++) {
@@ -229,25 +229,33 @@ int main(int argc, char** args) {
 						render_normals = !render_normals;
 						image_buffer_dirty = true;
 					}
-					// WASD keys - Move camera origin
-					if (ev.key.keysym.sym == SDLK_w) {
-						cam.set_origin(cam.get_origin() + point3(0, 0, -5) * delta);
-						image_buffer_dirty = true;
-					}
-					if (ev.key.keysym.sym == SDLK_a) {
-						cam.set_origin(cam.get_origin() + point3(-5, 0, 0) * delta);
-						image_buffer_dirty = true;
-					}
-					if (ev.key.keysym.sym == SDLK_s) {
-						cam.set_origin(cam.get_origin() + point3(0, 0, 5) * delta);
-						image_buffer_dirty = true;
-					}
-					if (ev.key.keysym.sym == SDLK_d) {
-						cam.set_origin(cam.get_origin() + point3(5, 0, 0) * delta);
-						image_buffer_dirty = true;
-					}
-					break;
 			}
+		}
+
+		// Poll for continuous inputs
+		const uint8_t* keys = SDL_GetKeyboardState(NULL);
+		if (keys[SDL_SCANCODE_W]) {
+			cam.move(point3(0, 0, delta * -5.0));
+			image_buffer_dirty = true;
+		}
+		if (keys[SDL_SCANCODE_A]) {
+			cam.move(point3(delta * -5.0, 0, 0));
+			image_buffer_dirty = true;
+		}
+		if (keys[SDL_SCANCODE_S]) {
+			cam.move(point3(0, 0, delta * 5.0));
+			image_buffer_dirty = true;
+		}
+		if (keys[SDL_SCANCODE_D]) {
+			cam.move(point3(delta * 5.0, 0, 0));
+			image_buffer_dirty = true;
+		}
+
+		int mouse_x, mouse_y;
+		uint32_t mouse_buttons = SDL_GetRelativeMouseState(&mouse_x, &mouse_y);
+		if (mouse_buttons & SDL_BUTTON(1) && (mouse_x != 0 || mouse_y != 0)) {
+			cam.rotate(mouse_x * delta * -0.1, mouse_y * delta * 0.1);
+			image_buffer_dirty = true;
 		}
 
 		char title[16];

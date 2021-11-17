@@ -10,7 +10,7 @@ class camera {
 			viewport_height = 2.0 * h;
 			viewport_width = aspect_ratio * viewport_height;
 
-			look_direction = -unit_vector(forward);
+			this->forward = unit_vector(forward);
 
 			origin = position;
 			recalculate();
@@ -29,23 +29,42 @@ class camera {
 			recalculate();
 		}
 
+		void move(vec3 direction, bool local = true) {
+			point3 new_position = origin;
+			if (local) {
+				new_position += (right * direction.x() + up * direction.y() + forward * direction.z());
+			} else {
+				new_position += direction;
+			}
+			set_origin(new_position);
+		}
+
+		void rotate(double x, double y) {
+			forward = unit_vector(forward + right * x + up * y);
+			recalculate();
+		}
+
 	private:
 		point3 origin;
-		vec3 look_direction;
+		vec3 forward;
+		vec3 right;
+		vec3 up;
+
 		point3 lower_left_corner;
 		vec3 horizontal;
 		vec3 vertical;
+
 		double aspect_ratio = 16.0 / 9.0;
 		double viewport_height;
 		double viewport_width;
 		double focal_length = 1.0;
 
 		void recalculate() {
-			vec3 u = unit_vector(cross(vec3(0, 1, 0), look_direction));
-			vec3 v = cross(look_direction, u);
+			right = unit_vector(cross(vec3(0, 1, 0), forward));
+			up = cross(forward, right);
 
-			horizontal = viewport_width * u;
-			vertical = viewport_height * v;
-			lower_left_corner = origin - horizontal / 2 - vertical / 2 - look_direction;
+			horizontal = viewport_width * right;
+			vertical = viewport_height * up;
+			lower_left_corner = origin - horizontal / 2 - vertical / 2 - forward;
 		}
 };
