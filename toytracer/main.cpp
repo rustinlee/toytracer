@@ -35,9 +35,6 @@ const int batch_count = 32;
 // Scene
 hittable_list scene;
 
-// Camera
-camera cam;
-
 // Debug visualizations
 bool render_normals;
 
@@ -68,7 +65,7 @@ color ray_color(const ray& r, int depth) {
 	return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
 }
 
-void render_pixels(color color_sums[], uint32_t pixel_sample_counts[], std::vector<uint8_t>& pixels, int start_index, int pixels_to_render) {
+void render_pixels(camera cam, color color_sums[], uint32_t pixel_sample_counts[], std::vector<uint8_t>& pixels, int start_index, int pixels_to_render) {
 	start_index %= (image_height * image_width);
 	for (int i = start_index; i < start_index + pixels_to_render; i++) {
 		int x = i % image_width;
@@ -174,9 +171,12 @@ int main(int argc, char** args) {
 	scene.add(make_shared<sphere>(point3(-1.0,    0.0, -1.0),   0.5, material_left));
 	scene.add(make_shared<sphere>(point3( 1.0,    0.0, -1.0),   0.5, material_right));
 
+	// Camera
+	camera cam = camera(vec3(0, 1, -2), vec3(0, -1, 1), 90.0, aspect_ratio);
+
 	// Initialize render futures array
 	for (int i = 0; i < batch_count; i++) {
-		render_futures[i] = std::async(std::launch::async, render_pixels, std::ref(color_sums), std::ref(pixel_sample_counts), std::ref(pixels), batches_dispatched * batch_size, batch_size);
+		render_futures[i] = std::async(std::launch::async, render_pixels, cam, std::ref(color_sums), std::ref(pixel_sample_counts), std::ref(pixels), batches_dispatched * batch_size, batch_size);
 		batches_dispatched++;
 	}
 
@@ -200,11 +200,11 @@ int main(int argc, char** args) {
 				const auto fs = render_futures[i].wait_for(std::chrono::seconds(0));
 				if (fs == std::future_status::ready) {
 					render_futures[i].get();
-					render_futures[i] = std::async(std::launch::async, render_pixels, std::ref(color_sums), std::ref(pixel_sample_counts), std::ref(pixels), batches_dispatched * batch_size, batch_size);
+					render_futures[i] = std::async(std::launch::async, render_pixels, cam, std::ref(color_sums), std::ref(pixel_sample_counts), std::ref(pixels), batches_dispatched * batch_size, batch_size);
 					batches_dispatched++;
 				}
 			} else {
-				render_futures[i] = std::async(std::launch::async, render_pixels, std::ref(color_sums), std::ref(pixel_sample_counts), std::ref(pixels), batches_dispatched * batch_size, batch_size);
+				render_futures[i] = std::async(std::launch::async, render_pixels, cam, std::ref(color_sums), std::ref(pixel_sample_counts), std::ref(pixels), batches_dispatched * batch_size, batch_size);
 				batches_dispatched++;
 			}
 		}
